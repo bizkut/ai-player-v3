@@ -452,6 +452,13 @@ local function skill_build_power(character, _)
   local inv = inv_of(character)
   local engine, boiler = steam_plant()
   local built_at
+  -- a plant that makes no steam gets reported whatever else is done this call
+  local plant_problem
+  if boiler and (boiler.status == defines.entity_status.no_fuel
+                 or boiler.status == defines.entity_status.no_input_fluid) then
+    plant_problem = "its boiler is " .. STATUS_NAME[boiler.status]
+      .. (boiler.status == defines.entity_status.no_fuel and " — fuel it with fuel_all" or "")
+  end
   -- machines already on the plant's network lack power because it makes none
   local waiting, starved = {}, 0
   for _, m in ipairs(unpowered_machines()) do
@@ -459,13 +466,8 @@ local function skill_build_power(character, _)
   end
   if #waiting == 0 then
     if starved > 0 then
-      local why = "its steam-engine has no steam"
-      if boiler then
-        why = "its boiler is " .. STATUS_NAME[boiler.status]
-          .. (boiler.status == defines.entity_status.no_fuel and " — fuel it with fuel_all" or "")
-      end
       return false, string.format("build_power: %d machine(s) are wired to the steam-engine at {%d,%d} but get no power: %s",
-        starved, engine.position.x, engine.position.y, why)
+        starved, engine.position.x, engine.position.y, plant_problem or "its steam-engine has no steam")
     end
     return false, "build_power: no electric machine is without power" .. (engine and "" or " — place one first")
   end
@@ -515,10 +517,11 @@ local function skill_build_power(character, _)
     built_at.x, built_at.y) or ""
   detail = "build_power: " .. detail .. string.format("wired %d machine(s), %d new pole(s)", wired, poles)
     .. (built_at and "; power flows once the boiler has made steam" or "")
-  if #problems > 0 then
-    return false, detail .. " — not wired: " .. table.concat(problems, "; ")
+  if #problems > 0 then detail = detail .. " — not wired: " .. table.concat(problems, "; ") end
+  if plant_problem then
+    detail = detail .. string.format(" — the steam-engine at {%d,%d} makes no power: %s", ep.x, ep.y, plant_problem)
   end
-  return true, detail
+  return #problems == 0 and not plant_problem, detail
 end
 
 
