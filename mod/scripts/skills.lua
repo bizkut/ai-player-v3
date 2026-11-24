@@ -248,10 +248,11 @@ end
 
 -- -------------------------------------------------------------------------
 -- loot_chests(radius?, items?) — collect items into the character's inventory
--- from nearby chests (any force) and from the OUTPUT of the force's own
--- furnaces/assemblers. The second half is how smelted plates come home: a
--- hand-fed furnace keeps what it made until someone takes it. Also enables
--- human→AI resource sharing and restocking before build_ghosts.
+-- from nearby chests (any force) and from the OUTPUT of furnaces/assemblers the
+-- AI placed itself. The second half is how smelted plates come home: a hand-fed
+-- furnace keeps what it made until someone takes it. Machines the human built
+-- are left alone (in co-op they share the force). Also enables human→AI
+-- resource sharing through chests and restocking before build_ghosts.
 -- items: names to restrict to — "a,b", {"a","b"} or one name; empty = take all.
 -- -------------------------------------------------------------------------
 AISkills.LOOT_RADIUS = 32
@@ -284,7 +285,7 @@ local function skill_loot_chests(character, p)
   end
   for _, e in ipairs(surface.find_entities_filtered{
       type = {"furnace", "assembling-machine"}, force = character.force, position = cp, radius = radius}) do
-    sources[#sources + 1] = e.get_output_inventory()
+    if AIRegistry.is_own(e) then sources[#sources + 1] = e.get_output_inventory() end
   end
 
   local taken = {}

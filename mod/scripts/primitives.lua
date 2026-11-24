@@ -329,8 +329,9 @@ local function action_place(character, action)
   if entity then
     inv.remove{name=item_name, count=1}
     -- create_entity does not raise on_built_entity, so register AI placements
-    -- with the machine registry directly (no-ops for non-machine items).
-    AIRegistry.add(entity)
+    -- with the machine registry directly (no-ops for non-machine items), marked
+    -- as the AI's own.
+    AIRegistry.add(entity, true)
     highlight(surface, action.position, {r=0, g=1, b=0})
     debug_print("Placed: " .. item_name)
     return true, string.format("placed %s at {%d,%d}", item_name, px, py)

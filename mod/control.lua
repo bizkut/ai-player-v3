@@ -332,6 +332,7 @@ end
 
 script.on_init(function()
   init_storage()
+  storage.ai_player.placed = {}  -- new game: nothing to adopt (registry.lua)
   AICharacter.create_force()
   AIBrain.write_bridge_config()
   game.print("[AI Player v3] Initialised — use /spawn-ai-player to start", {r=0, g=1, b=1})
@@ -352,6 +353,7 @@ script.on_configuration_changed(function()
   -- Rebuild the machine registry from the live world (covers mod-update load and
   -- any machines created while the registry was absent/stale).
   AIRegistry.reconcile(game.surfaces["nauvis"], game.forces[storage.ai_player.force_name])
+  AIRegistry.adopt_existing()
   game.print("[AI Player v3] Configuration reloaded", {r=0.7, g=1, b=0.7})
 end)
 

@@ -47,12 +47,39 @@ local function ai_force_name()
 end
 
 -- Register a machine. Ignores non-tracked types and entities not on the AI force,
--- so human/enemy builds never enter the set.
-function AIRegistry.add(entity)
+-- so human/enemy builds never enter the set. placed_by_ai marks the AI's own
+-- placements (see is_own).
+function AIRegistry.add(entity, placed_by_ai)
   if not (entity and entity.valid and entity.unit_number) then return end
   if not TRACKED_TYPES[entity.type] then return end
   if entity.force.name ~= ai_force_name() then return end
   store()[entity.unit_number] = entity
+  if placed_by_ai then
+    storage.ai_player.placed = storage.ai_player.placed or {}
+    storage.ai_player.placed[entity.unit_number] = entity
+  end
+end
+
+-- Did the AI place this machine itself? In co-op the registry holds the whole
+-- shared base, the human's machines included; the AI may only empty the outputs
+-- of its own, so it never drains the human's production lines.
+-- storage.ai_player.placed: unit_number -> LuaEntity for AI placements.
+function AIRegistry.is_own(entity)
+  local placed = storage.ai_player.placed
+  return placed ~= nil and placed[entity.unit_number] ~= nil
+end
+
+-- Saves from before placement tracking kept no record of who placed what. Once,
+-- when such a save is first loaded, adopt the machines already standing that no
+-- player built or configured: script-placed entities have no last_user, a
+-- human's build carries theirs.
+function AIRegistry.adopt_existing()
+  if storage.ai_player.placed then return end
+  local placed = {}
+  for un, e in pairs(store()) do
+    if e.valid and e.last_user == nil then placed[un] = e end
+  end
+  storage.ai_player.placed = placed
 end
 
 function AIRegistry.remove(unit_number)
@@ -79,12 +106,12 @@ function AIRegistry.count()
   return n
 end
 
--- Finished products waiting in tracked machines' output slots: how many `item`
--- in total, and the machine holding some that is nearest to `origin`.
+-- Finished products waiting in the output slots of the AI's own machines: how
+-- many `item` in total, and the machine holding some that is nearest to `origin`.
 function AIRegistry.output_stock(item, origin)
   local total, nearest, nd = 0, nil, math.huge
   for _, e in ipairs(AIRegistry.machines()) do
-    local out = e.get_output_inventory()
+    local out = AIRegistry.is_own(e) and e.get_output_inventory()
     local n = out and out.get_item_count(item) or 0
     if n > 0 then
       total = total + n
@@ -105,6 +132,9 @@ function AIRegistry.reconcile(surface, force)
     if e.valid and e.unit_number then m[e.unit_number] = e end
   end
   storage.ai_player.machines = m
+  for un, e in pairs(storage.ai_player.placed or {}) do
+    if not e.valid then storage.ai_player.placed[un] = nil end
+  end
   storage.ai_player.last_reconcile_tick = game.tick
 end
 
