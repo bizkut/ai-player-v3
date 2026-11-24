@@ -333,15 +333,32 @@ local function build_steam_plant(character, anchor)
   return nil, "no shore near the water with room for offshore-pump, boiler and steam-engine"
 end
 
--- A steam engine already fed: holding steam, or linked straight to a boiler.
-local function fed_engine()
+-- Does any fluidbox in a get_connections() result belong to an entity of `type`?
+local function linked_type(fluidboxes, type)
+  for _, fb in pairs(fluidboxes) do
+    if fb.owner.type == type then return true end
+  end
+  return false
+end
+
+-- The force's steam plant: a steam engine linked straight to a boiler that has
+-- water or an offshore-pump feeding it, or an engine holding steam. A boiler
+-- without water never makes steam, so an engine on one is no plant.
+-- Returns engine, boiler (boiler nil when only the engine's steam proves it).
+local function steam_plant()
   for _, e in ipairs(AIRegistry.machines()) do
     if e.type == "generator" then
+      for _, fb in pairs(e.fluidbox.get_connections(1)) do
+        local boiler = fb.owner
+        if boiler.type == "boiler" then
+          local water = boiler.fluidbox[1]
+          if (water and water.amount > 0) or linked_type(boiler.fluidbox.get_connections(1), "offshore-pump") then
+            return e, boiler
+          end
+        end
+      end
       local steam = e.fluidbox[1]
       if steam and steam.amount > 0 then return e end
-      for _, fb in pairs(e.fluidbox.get_connections(1)) do
-        if fb.owner.type == "boiler" then return e end
-      end
     end
   end
 end
@@ -350,15 +367,17 @@ local function same_network(a, b)
   return a.electric_network_id ~= nil and a.electric_network_id == b.electric_network_id
 end
 
--- Electric machines that neither the engine's network nor any other powered
--- network reaches.
-local function machines_without_power(engine)
+local STATUS_NAME = {}
+for name, status in pairs(defines.entity_status) do STATUS_NAME[status] = name end
+local UNPOWERED = {[defines.entity_status.no_power] = true,
+                   [defines.entity_status.not_plugged_in_electric_network] = true}
+
+-- Electric machines reporting no power (what perception counts as
+-- machines_no_power). Generators are suppliers, not consumers.
+local function unpowered_machines()
   local out = {}
   for _, e in ipairs(AIRegistry.machines()) do
-    if e.type ~= "generator" and e.prototype.electric_energy_source_prototype
-       and not (engine and same_network(e, engine)) and not e.is_connected_to_electric_network() then
-      out[#out + 1] = e
-    end
+    if e.type ~= "generator" and UNPOWERED[e.status] then out[#out + 1] = e end
   end
   return out
 end
@@ -431,9 +450,23 @@ end
 
 local function skill_build_power(character, _)
   local inv = inv_of(character)
-  local engine, built_at = fed_engine(), nil
-  local waiting = machines_without_power(engine)
+  local engine, boiler = steam_plant()
+  local built_at
+  -- machines already on the plant's network lack power because it makes none
+  local waiting, starved = {}, 0
+  for _, m in ipairs(unpowered_machines()) do
+    if engine and same_network(m, engine) then starved = starved + 1 else waiting[#waiting + 1] = m end
+  end
   if #waiting == 0 then
+    if starved > 0 then
+      local why = "its steam-engine has no steam"
+      if boiler then
+        why = "its boiler is " .. STATUS_NAME[boiler.status]
+          .. (boiler.status == defines.entity_status.no_fuel and " — fuel it with fuel_all" or "")
+      end
+      return false, string.format("build_power: %d machine(s) are wired to the steam-engine at {%d,%d} but get no power: %s",
+        starved, engine.position.x, engine.position.y, why)
+    end
     return false, "build_power: no electric machine is without power" .. (engine and "" or " — place one first")
   end
 
@@ -480,9 +513,10 @@ local function skill_build_power(character, _)
 
   local detail = built_at and string.format("built offshore-pump -> boiler -> steam-engine at {%d,%d} (boiler fuelled); ",
     built_at.x, built_at.y) or ""
-  detail = "build_power: " .. detail .. string.format("powered %d machine(s), %d pole(s) placed", wired, poles)
+  detail = "build_power: " .. detail .. string.format("wired %d machine(s), %d new pole(s)", wired, poles)
+    .. (built_at and "; power flows once the boiler has made steam" or "")
   if #problems > 0 then
-    return false, detail .. " — not powered: " .. table.concat(problems, "; ")
+    return false, detail .. " — not wired: " .. table.concat(problems, "; ")
   end
   return true, detail
 end
