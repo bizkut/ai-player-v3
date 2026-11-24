@@ -7,7 +7,9 @@ Date: 2026-11-25
       inventories exist instead of "no building with a 'nil' slot".
     - research reports the technology already being researched (progress and
       science packs it needs) instead of queueing unrelated technologies on
-      every call.
+      every call. A named technology is queued or the reason it can't be is
+      given (already researched or queued, trigger, missing prerequisites);
+      another one is never substituted.
     - Bridge responses lost the research "tech", build_miner "resource" and
       deposit_to_chest "keep" parameters: research ignored the requested
       technology and build_miner always mined iron-ore.

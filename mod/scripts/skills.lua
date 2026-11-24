@@ -885,27 +885,49 @@ function AISkills.trigger_techs(force)
   return out
 end
 
+-- Why `tech` (a LuaTechnology or nil) can't be queued right now.
+local function unqueueable_reason(force, tech)
+  if not tech then return "there is no such technology" end
+  if tech.researched then return "it is already researched" end
+  for _, t in pairs(force.research_queue) do
+    if t.name == tech.name then return "it is already queued" end
+  end
+  if tech.prototype.research_trigger then
+    return "it unlocks when you " .. describe_trigger(tech.prototype.research_trigger)
+  end
+  local missing = {}
+  for name, pre in pairs(tech.prerequisites) do
+    if not pre.researched then missing[#missing + 1] = name end
+  end
+  if #missing > 0 then return "research " .. table.concat(missing, ", ") .. " first" end
+  if not tech.enabled then return "it is not available in this game" end
+  return "the game refused to queue it"
+end
+
 local function skill_research(character, p)
   local force = character.force
-
-  -- Something in progress: only queue an explicitly named tech behind it; never
-  -- pile unrelated techs onto the queue.
-  local cur = force.current_research
+  local cur, now = force.current_research, nil
   if cur then
-    if p.tech and try_queue(force, force.technologies[p.tech]) then
-      return true, "queued research: " .. p.tech .. " after " .. cur.name
-    end
     local packs = {}
     for _, ing in pairs(cur.research_unit_ingredients) do packs[#packs + 1] = ing.name end
-    return false, string.format("research: already researching %s (%d%%) — keep a powered lab fed with %s",
+    now = string.format("researching %s (%d%%) — keep a powered lab fed with %s",
       cur.name, math.floor(force.research_progress * 100), table.concat(packs, ", "))
   end
 
+  -- A named tech is queued or explained, never swapped for another.
   if p.tech then
-    if try_queue(force, force.technologies[p.tech]) then
-      return true, "queued research: " .. p.tech .. " — feed a lab with science packs to progress"
+    local tech = force.technologies[p.tech]
+    if try_queue(force, tech) then
+      return true, "queued research: " .. p.tech
+        .. (cur and (" after " .. cur.name) or " — feed a lab with science packs to progress")
     end
+    return false, "research: can't queue " .. p.tech .. " — " .. unqueueable_reason(force, tech)
+      .. (now and ("; now " .. now) or "")
   end
+
+  -- Something in progress: don't pile more techs onto the queue.
+  if now then return false, "research: already " .. now end
+
   for _, name in ipairs(PREFERRED_TECH) do
     if try_queue(force, force.technologies[name]) then
       return true, "queued research: " .. name .. " — feed a lab with science packs to progress"
