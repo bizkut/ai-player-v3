@@ -208,7 +208,7 @@ Skills are the primary interface between the LLM and the game. The LLM picks a s
 | `build_smelter` | `ore`, `count` | Places and loads stone-furnaces to smelt ore into plates. |
 | `fuel_all` | _(none)_ | Tops up every nearby burner machine low on fuel. |
 | `research` | `tech` _(optional)_ | Queues a technology; auto-picks the next logical tech if `tech` is omitted. |
-| `loot_chests` | _(none)_ | Pulls items from nearby chests into the AI's inventory. |
+| `loot_chests` | `items`, `radius` _(both optional)_ | Collects items into the AI's inventory from nearby chests and from the output of its furnaces/assemblers (smelted plates). |
 | `deposit_to_chest` | _(none)_ | Deposits excess inventory items into nearby chests. |
 | `return_home` | _(none)_ | Teleports back to the AI's base anchor point. |
 | `goto` | `position` | Teleports to `{"x": N, "y": N}` for manual positioning. |

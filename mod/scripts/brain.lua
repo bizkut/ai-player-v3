@@ -333,7 +333,7 @@ function AIBrain.parse_action_object(obj_str)
     end
   end
 
-  -- items array for create_todo
+  -- items: a JSON array (create_todo list, loot_chests filter) or an "a,b" string
   local items_str = obj_str:match('"items"%s*:%s*(%[[^%]]*%])')
   if items_str then
     local items = {}
@@ -341,6 +341,8 @@ function AIBrain.parse_action_object(obj_str)
       table.insert(items, item)
     end
     action.items = items
+  else
+    action.items = json_extract_string(obj_str, "items")
   end
 
   return action

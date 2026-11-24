@@ -255,11 +255,12 @@ def deconstruct(radius: int = 96) -> str:
 
 @mcp.tool()
 def loot_chests(radius: int = 32, items: str = "") -> str:
-    """Pull items from nearby chests (any force) into the AI's inventory.
+    """Pull items into the AI's inventory from nearby chests (any force) and from
+    the output slots of the AI force's furnaces/assemblers (smelted plates).
     Human→AI sharing: put coal/materials in a chest, then call this.
     AI restocking: call before build_ghosts when items are reported missing.
     items: comma-separated item names to restrict looting, e.g. 'coal,iron-plate'
-           (empty = take everything from all reachable chests).
+           (empty = take everything reachable).
     radius: search radius in tiles (max 128)."""
     return _skill("loot_chests", radius=radius, items=items if items else None)
 

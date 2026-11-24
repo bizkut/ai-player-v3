@@ -16,8 +16,20 @@ local function inv_of(character)
 end
 
 -- When nothing is within a skill's working radius, point the model at the nearest
--- source further out so it can goto there instead of retrying in place forever.
+-- target further out so it can goto there instead of retrying in place forever.
 local FAR_SEARCH_RADIUS = 256
+
+local function distance(a, b)
+  local dx, dy = a.x - b.x, a.y - b.y
+  return math.sqrt(dx * dx + dy * dy)
+end
+
+-- '<N> tiles away: {"skill":"goto",...} first, then retry'
+local function goto_hint(origin, target)
+  return string.format('%d tiles away: {"skill":"goto","position":{"x":%d,"y":%d}} first, then retry',
+    math.floor(distance(origin, target)), math.floor(target.x), math.floor(target.y))
+end
+
 local function far_source_hint(surface, origin, item)
   local filter = {position = origin, radius = FAR_SEARCH_RADIUS}
   if item == "wood" then filter.type = "tree" else filter.name = item end
@@ -28,8 +40,7 @@ local function far_source_hint(surface, origin, item)
     if d < bd then bd = d; best = e.position end
   end
   if not best then return " (none within " .. FAR_SEARCH_RADIUS .. " tiles either)" end
-  return string.format(' — nearest is %d tiles away: {"skill":"goto","position":{"x":%d,"y":%d}} first, then retry',
-    math.floor(math.sqrt(bd)), math.floor(best.x), math.floor(best.y))
+  return " — nearest is " .. goto_hint(origin, best)
 end
 
 -- -------------------------------------------------------------------------
@@ -236,53 +247,70 @@ local function skill_fuel_all(character, _)
 end
 
 -- -------------------------------------------------------------------------
--- loot_chests(radius?, items?) — pull items from nearby chests (any force)
--- into the character's inventory. Enables human→AI resource sharing (coal,
--- building materials, etc.) and AI self-restocking before build_ghosts.
--- items: comma-separated item names to restrict looting; empty = take all.
+-- loot_chests(radius?, items?) — collect items into the character's inventory
+-- from nearby chests (any force) and from the OUTPUT of the force's own
+-- furnaces/assemblers. The second half is how smelted plates come home: a
+-- hand-fed furnace keeps what it made until someone takes it. Also enables
+-- human→AI resource sharing and restocking before build_ghosts.
+-- items: names to restrict to — "a,b", {"a","b"} or one name; empty = take all.
 -- -------------------------------------------------------------------------
+AISkills.LOOT_RADIUS = 32
+
+-- "a,b" (MCP/remote callers), {"a","b"} (JSON array from the model) or a single
+-- name -> set of names; nil means "everything".
+local function item_filter(items)
+  if type(items) == "string" then
+    local list = {}
+    for name in items:gmatch("[^,]+") do list[#list + 1] = name:match("^%s*(.-)%s*$") end
+    items = list
+  end
+  if type(items) ~= "table" or #items == 0 then return nil end
+  local set = {}
+  for _, name in ipairs(items) do set[name] = true end
+  return set
+end
+
 local function skill_loot_chests(character, p)
   local surface = character.surface
-  local radius  = math.min(p.radius or 32, 128)
+  local radius  = math.min(p.radius or AISkills.LOOT_RADIUS, 128)
   local inv     = inv_of(character)
+  local filter  = item_filter(p.items or p.item)
+  local cp      = character.position
 
-  local filter = nil
-  if p.items and p.items ~= "" then
-    filter = {}
-    for name in p.items:gmatch("[^,]+") do
-      filter[name:match("^%s*(.-)%s*$")] = true
-    end
+  local sources = {}
+  for _, e in ipairs(surface.find_entities_filtered{
+      type = {"container", "logistic-container"}, position = cp, radius = radius}) do
+    sources[#sources + 1] = e.get_inventory(defines.inventory.chest)
   end
-
-  local chests = surface.find_entities_filtered{
-    type = {"container", "logistic-container"},
-    position = character.position, radius = radius,
-  }
-  if #chests == 0 then
-    return false, "loot_chests: no chests within " .. radius .. " tiles"
+  for _, e in ipairs(surface.find_entities_filtered{
+      type = {"furnace", "assembling-machine"}, force = character.force, position = cp, radius = radius}) do
+    sources[#sources + 1] = e.get_output_inventory()
   end
 
   local taken = {}
-  for _, chest in ipairs(chests) do
-    if chest.valid then
-      local ci = chest.get_inventory(defines.inventory.chest)
-      if ci then
-        for _, slot in ipairs(ci.get_contents()) do
-          local name, avail = slot.name, slot.count
-          if not filter or filter[name] then
-            local n = inv.insert{name = name, count = avail}
-            if n > 0 then
-              ci.remove{name = name, count = n}
-              taken[name] = (taken[name] or 0) + n
-            end
-          end
+  for _, src in ipairs(sources) do
+    for _, slot in ipairs(src.get_contents()) do
+      if not filter or filter[slot.name] then
+        local n = inv.insert{name = slot.name, count = slot.count, quality = slot.quality}
+        if n > 0 then
+          src.remove{name = slot.name, count = n, quality = slot.quality}
+          taken[slot.name] = (taken[slot.name] or 0) + n
         end
       end
     end
   end
 
   if not next(taken) then
-    return false, "loot_chests: nothing taken (chests empty, inventory full, or filter matched nothing)"
+    -- Out of range rather than absent? Say where a wanted item is waiting.
+    for name in pairs(filter or {}) do
+      local stock, machine = AIRegistry.output_stock(name, cp)
+      if machine and distance(cp, machine.position) > radius then
+        return false, string.format("loot_chests: no %s within %d tiles — %d waiting in your machines, nearest %s",
+          name, radius, stock, goto_hint(cp, machine.position))
+      end
+    end
+    return false, "loot_chests: nothing taken within " .. radius
+      .. " tiles (nothing to collect, inventory full, or filter matched nothing)"
   end
   local parts = {}
   for name, count in pairs(taken) do parts[#parts + 1] = count .. "x " .. name end

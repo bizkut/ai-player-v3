@@ -79,6 +79,23 @@ function AIRegistry.count()
   return n
 end
 
+-- Finished products waiting in tracked machines' output slots: how many `item`
+-- in total, and the machine holding some that is nearest to `origin`.
+function AIRegistry.output_stock(item, origin)
+  local total, nearest, nd = 0, nil, math.huge
+  for _, e in ipairs(AIRegistry.machines()) do
+    local out = e.get_output_inventory()
+    local n = out and out.get_item_count(item) or 0
+    if n > 0 then
+      total = total + n
+      local dx, dy = e.position.x - origin.x, e.position.y - origin.y
+      local d = dx * dx + dy * dy
+      if d < nd then nd = d; nearest = e end
+    end
+  end
+  return total, nearest
+end
+
 -- Full reconciliation: rebuild the set from a surface scan. The authoritative
 -- correction path — call periodically (not every tick) and on load/update.
 function AIRegistry.reconcile(surface, force)

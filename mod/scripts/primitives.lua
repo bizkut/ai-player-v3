@@ -391,10 +391,32 @@ local function craft_shortfall(character, recipe_name, count)
     end
   end
   for _, ing in pairs(recipe.ingredients) do need(ing.name, ing.amount * count, 0) end
-  local parts = {}
-  for n, m in pairs(short) do parts[#parts + 1] = m .. " more " .. n end
-  if #parts == 0 then return "ingredients look sufficient but crafting was refused" end
-  return "need " .. table.concat(parts, ", ") .. " (intermediates auto-craft) — gather/smelt those first"
+  if not next(short) then return "ingredients look sufficient but crafting was refused" end
+
+  -- Name what is short and, when it is already made and just sitting in machine
+  -- outputs (a hand-fed furnace keeps its plates), how to fetch it.
+  local parts, waiting, fetch_from = {}, {}, nil
+  for name, missing in pairs(short) do
+    local stock, machine = AIRegistry.output_stock(name, character.position)
+    if stock > 0 then
+      parts[#parts + 1] = string.format("%d more %s (%d waiting in your machines)", missing, name, stock)
+      waiting[#waiting + 1] = name
+      fetch_from = fetch_from or machine.position
+    else
+      parts[#parts + 1] = missing .. " more " .. name
+    end
+  end
+  table.sort(parts)
+  table.sort(waiting)
+  local msg = "need " .. table.concat(parts, ", ") .. " (intermediates auto-craft)"
+  if #waiting == 0 then return msg .. " — gather/smelt those first" end
+  msg = msg .. ' — collect with {"skill":"loot_chests","items":"' .. table.concat(waiting, ",") .. '"}'
+  local dx, dy = fetch_from.x - character.position.x, fetch_from.y - character.position.y
+  if dx * dx + dy * dy > AISkills.LOOT_RADIUS ^ 2 then
+    msg = msg .. string.format(' after {"skill":"goto","position":{"x":%d,"y":%d}}',
+      math.floor(fetch_from.x), math.floor(fetch_from.y))
+  end
+  return msg
 end
 
 local function action_craft(character, action)
