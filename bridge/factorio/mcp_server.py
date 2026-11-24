@@ -242,6 +242,16 @@ def fuel_all() -> str:
 
 
 @mcp.tool()
+def build_power() -> str:
+    """Steam power for the AI force's electric machines that have none: places an
+    offshore-pump at the nearest water, a boiler and a steam-engine (boiler
+    fuelled with coal), then small-electric-poles to every unpowered machine.
+    Later calls extend the existing grid. Needs offshore-pump, boiler,
+    steam-engine, small-electric-pole and coal in the AI's inventory."""
+    return _skill("build_power")
+
+
+@mcp.tool()
 def build_ghosts() -> str:
     """Build any buildable ghost entities within range from the AI's inventory."""
     return _skill("build_ghosts")

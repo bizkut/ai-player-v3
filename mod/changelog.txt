@@ -1,4 +1,32 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.3
+Date: 2026-11-25
+  Features:
+    - build_power skill: places offshore-pump -> boiler -> steam-engine at the
+      water nearest the unpowered machines, fuels the boiler, and runs
+      small-electric-poles to every electric machine without power. Later
+      calls extend the existing grid.
+    - loot_chests also collects the output of furnaces/assemblers the AI
+      placed (smelted plates stayed in the furnaces). In co-op the human's
+      machines are never emptied.
+    - /ai-claim marks machines with no recorded builder as the AI's, for
+      co-op saves started before 0.4.3.
+    - perception.research.trigger_techs lists the trigger technologies the
+      force can complete next and what each needs.
+  Bugfixes:
+    - The AI's hand-crafting now counts as production, so craft-item trigger
+      technologies unlock (automation-science-pack: craft a lab).
+    - research reports the real research trigger instead of telling the
+      model to hand-craft automation-science-pack before it is unlocked.
+    - Failed crafts say why: recipe locked, machine-only, or which base
+      items are short and where finished ones are waiting.
+    - gather, build_miner and fuel_all failures name the nearest target
+      beyond their radius with a goto position.
+    - \uXXXX escapes in bridge responses are decoded; non-ASCII text arrived
+      as "u2014".
+    - The "last turn" summary resets every turn, so one bridge fallback no
+      longer repeats in every prompt.
+---------------------------------------------------------------------------------------------------
 Version: 0.4.2
 Date: 2026-08-29
   Features:

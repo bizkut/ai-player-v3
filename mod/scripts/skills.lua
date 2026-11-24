@@ -220,6 +220,275 @@ local function skill_build_miner(character, p)
 end
 
 -- -------------------------------------------------------------------------
+-- build_power() — steam power for the force's electric machines that have none.
+-- Without a steam engine fed by a boiler yet, builds offshore-pump -> boiler ->
+-- steam-engine at the water nearest the waiting machines and fuels the boiler;
+-- then runs small-electric-poles from that network to each waiting machine.
+-- Fluid connections are found by trial: a candidate is created, kept only if its
+-- fluidbox links to the previous stage, and the winning spot is then built
+-- through the place primitive (inventory, build rules, ownership).
+-- -------------------------------------------------------------------------
+local POLE = "small-electric-pole"
+local POLE_REACH = prototypes.entity[POLE].get_max_wire_distance()
+local POLE_SUPPLY = prototypes.entity[POLE].get_supply_area_distance()
+local CARDINALS = {defines.direction.north, defines.direction.east,
+                   defines.direction.south, defines.direction.west}
+local DIRECTION_NAME = {}
+for name, dir in pairs(AIActions.DIRECTION_MAP) do DIRECTION_NAME[dir] = name end
+
+-- Does any fluidbox in a get_connections() result belong to `entity`?
+local function links_to(fluidboxes, entity)
+  for _, fb in pairs(fluidboxes) do
+    if fb.owner == entity then return true end
+  end
+  return false
+end
+
+-- The spot nearest `around` (half-tile lattice within `reach`, any cardinal
+-- direction) where a manual build of `name` is legal and linked(entity) holds
+-- once it stands there. Trial entities are removed again. Returns pos, dir.
+local function find_linked_spot(surface, force, name, around, reach, linked)
+  local spots = {}
+  for dx = -reach, reach, 0.5 do
+    for dy = -reach, reach, 0.5 do
+      spots[#spots + 1] = {x = around.x + dx, y = around.y + dy, d = dx * dx + dy * dy}
+    end
+  end
+  table.sort(spots, function(a, b) return a.d < b.d end)
+  local tried = {}
+  for _, spot in ipairs(spots) do
+    for _, dir in ipairs(CARDINALS) do
+      if surface.can_place_entity{name = name, position = spot, direction = dir, force = force,
+                                  build_check_type = defines.build_check_type.manual} then
+        local e = surface.create_entity{name = name, position = spot, direction = dir, force = force}
+        if e then
+          local pos, edir = e.position, e.direction
+          local key = pos.x .. "," .. pos.y .. "," .. edir
+          local ok = not tried[key] and linked(e)
+          tried[key] = true
+          e.destroy()
+          if ok then return pos, edir end
+        end
+      end
+    end
+  end
+end
+
+-- Water tile centres nearest `origin` first (searching out to 256 tiles).
+local function water_near(surface, origin)
+  for _, radius in ipairs({32, 64, 128, 256}) do
+    local tiles = surface.find_tiles_filtered{position = origin, radius = radius, collision_mask = "water_tile"}
+    if #tiles > 0 then
+      local list = {}
+      for _, t in ipairs(tiles) do
+        local p = {x = t.position.x + 0.5, y = t.position.y + 0.5}
+        p.d = distance(p, origin)
+        list[#list + 1] = p
+      end
+      table.sort(list, function(a, b) return a.d < b.d end)
+      return list
+    end
+  end
+  return {}
+end
+
+-- Build pump, boiler and engine as one linked chain at the first shore spot near
+-- `anchor` with room for all three. Returns the engine, or nil and a reason.
+local function build_steam_plant(character, anchor)
+  local surface, force, inv = character.surface, character.force, inv_of(character)
+  local water = water_near(surface, anchor)
+  if #water == 0 then return nil, "no water within 256 tiles" end
+  local pumps_seen, attempts = {}, 0
+  for i = 1, math.min(#water, 200) do
+    -- the pump stands on the shore tile beside this water tile, facing it
+    local pp, pdir = find_linked_spot(surface, force, "offshore-pump", water[i], 1, function() return true end)
+    local key = pp and (pp.x .. "," .. pp.y)
+    if pp and not pumps_seen[key] then
+      pumps_seen[key] = true
+      attempts = attempts + 1
+      local pump = surface.create_entity{name = "offshore-pump", position = pp, direction = pdir, force = force}
+      local bp, bdir = find_linked_spot(surface, force, "boiler", pump.fluidbox.get_pipe_connections(1)[1].target_position, 3,
+        function(b) return links_to(b.fluidbox.get_connections(1), pump) end)
+      local ep, edir
+      if bp then
+        local boiler = surface.create_entity{name = "boiler", position = bp, direction = bdir, force = force}
+        ep, edir = find_linked_spot(surface, force, "steam-engine", boiler.fluidbox.get_pipe_connections(2)[1].target_position, 4,
+          function(e) return links_to(boiler.fluidbox.get_connections(2), e) end)
+        boiler.destroy()
+      end
+      pump.destroy()
+      if ep then
+        for _, part in ipairs({{"offshore-pump", pp, pdir}, {"boiler", bp, bdir}, {"steam-engine", ep, edir}}) do
+          local ok, detail = AIActions.run(character, {action = "place", item = part[1], position = part[2],
+                                                       direction = DIRECTION_NAME[part[3]]})
+          if not ok then return nil, detail end
+        end
+        AIActions.run(character, {action = "insert", item = "coal", count = math.min(10, inv.get_item_count("coal")),
+                                  position = bp, inventory = "fuel"})
+        return surface.find_entity("steam-engine", ep)
+      end
+      if attempts >= 15 then break end
+    end
+  end
+  return nil, "no shore near the water with room for offshore-pump, boiler and steam-engine"
+end
+
+-- A steam engine already fed: holding steam, or linked straight to a boiler.
+local function fed_engine()
+  for _, e in ipairs(AIRegistry.machines()) do
+    if e.type == "generator" then
+      local steam = e.fluidbox[1]
+      if steam and steam.amount > 0 then return e end
+      for _, fb in pairs(e.fluidbox.get_connections(1)) do
+        if fb.owner.type == "boiler" then return e end
+      end
+    end
+  end
+end
+
+local function same_network(a, b)
+  return a.electric_network_id ~= nil and a.electric_network_id == b.electric_network_id
+end
+
+-- Electric machines that neither the engine's network nor any other powered
+-- network reaches.
+local function machines_without_power(engine)
+  local out = {}
+  for _, e in ipairs(AIRegistry.machines()) do
+    if e.type ~= "generator" and e.prototype.electric_energy_source_prototype
+       and not (engine and same_network(e, engine)) and not e.is_connected_to_electric_network() then
+      out[#out + 1] = e
+    end
+  end
+  return out
+end
+
+-- Would a pole at `p` power `entity` (supply square overlaps its box)?
+local function covers(p, entity)
+  local bb = entity.bounding_box
+  return p.x + POLE_SUPPLY > bb.left_top.x and p.x - POLE_SUPPLY < bb.right_bottom.x
+     and p.y + POLE_SUPPLY > bb.left_top.y and p.y - POLE_SUPPLY < bb.right_bottom.y
+end
+
+-- Place a pole through the primitive on the tile centre nearest `aim` (within 2
+-- tiles) for which accept(p) holds. Returns the pole or nil.
+local function place_pole(character, aim, accept)
+  local surface = character.surface
+  local cx, cy, spots = math.floor(aim.x), math.floor(aim.y), {}
+  for dx = -2, 2 do
+    for dy = -2, 2 do
+      local p = {x = cx + dx + 0.5, y = cy + dy + 0.5}
+      p.d = distance(p, aim)
+      spots[#spots + 1] = p
+    end
+  end
+  table.sort(spots, function(a, b) return a.d < b.d end)
+  for _, p in ipairs(spots) do
+    if accept(p) and surface.can_place_entity{name = POLE, position = p, force = character.force,
+                                              build_check_type = defines.build_check_type.manual}
+       and AIActions.run(character, {action = "place", item = POLE, position = p}) then
+      return surface.find_entity(POLE, p)
+    end
+  end
+end
+
+-- The pole on the engine's network nearest `target`; places one beside the
+-- engine if it has none yet.
+local function network_pole(character, engine, target)
+  local best, bd = nil, math.huge
+  if engine.electric_network_id then
+    for _, p in ipairs(character.surface.find_entities_filtered{type = "electric-pole", force = character.force}) do
+      if same_network(p, engine) and distance(p.position, target) < bd then
+        best, bd = p, distance(p.position, target)
+      end
+    end
+  end
+  return best or place_pole(character, engine.position, function(p) return covers(p, engine) end)
+end
+
+-- Run poles from `last` until `machine` shares its network. Returns nil, or why
+-- it couldn't.
+local function wire(character, last, machine)
+  local inv = inv_of(character)
+  for _ = 1, 40 do
+    if same_network(machine, last) then return nil end
+    if inv.get_item_count(POLE) == 0 then return "out of " .. POLE .. "s" end
+    local from, d = last.position, distance(last.position, machine.position)
+    local function in_reach(p) return distance(p, from) <= POLE_REACH end
+    -- a pole that powers the machine if one fits in reach, else the longest hop toward it
+    local pole = place_pole(character, machine.position, function(p) return in_reach(p) and covers(p, machine) end)
+    if not pole then
+      local hop = math.min(d - 1, POLE_REACH - 1.5) / d
+      pole = place_pole(character, {x = from.x + (machine.position.x - from.x) * hop, y = from.y + (machine.position.y - from.y) * hop},
+        function(p) return in_reach(p) and distance(p, machine.position) < d end)
+    end
+    if not pole then return "no room for a pole" end
+    last = pole
+  end
+  if same_network(machine, last) then return nil end
+  return "more than 40 poles away"
+end
+
+local function skill_build_power(character, _)
+  local inv = inv_of(character)
+  local engine, built_at = fed_engine(), nil
+  local waiting = machines_without_power(engine)
+  if #waiting == 0 then
+    return false, "build_power: no electric machine is without power" .. (engine and "" or " — place one first")
+  end
+
+  if not engine then
+    local missing = {}
+    for _, item in ipairs({"offshore-pump", "boiler", "steam-engine", POLE, "coal"}) do
+      if inv.get_item_count(item) == 0 then missing[#missing + 1] = item end
+    end
+    if #missing > 0 then
+      return false, "build_power: need " .. table.concat(missing, ", ") .. " in your inventory first"
+    end
+    -- site the plant at the water nearest the waiting machine closest to you
+    local cp, anchor, ad = character.position, nil, math.huge
+    for _, m in ipairs(waiting) do
+      if distance(m.position, cp) < ad then anchor, ad = m.position, distance(m.position, cp) end
+    end
+    local why
+    engine, why = build_steam_plant(character, anchor)
+    if not engine then return false, "build_power: " .. why end
+    built_at = engine.position
+  end
+
+  -- wire the waiting machines, nearest to the engine first (an earlier chain may
+  -- already reach some of them)
+  local ep, poles_before = engine.position, inv.get_item_count(POLE)
+  table.sort(waiting, function(a, b) return distance(a.position, ep) < distance(b.position, ep) end)
+  local wired, problems = 0, {}
+  for _, m in ipairs(waiting) do
+    if m.valid then
+      local why
+      if not same_network(m, engine) then
+        local from = network_pole(character, engine, m.position)
+        why = "no room for a pole beside the steam-engine"
+        if from then why = wire(character, from, m) end
+      end
+      if why then
+        problems[#problems + 1] = string.format("%s at {%d,%d}: %s", m.name, m.position.x, m.position.y, why)
+      else
+        wired = wired + 1
+      end
+    end
+  end
+  local poles = poles_before - inv.get_item_count(POLE)
+
+  local detail = built_at and string.format("built offshore-pump -> boiler -> steam-engine at {%d,%d} (boiler fuelled); ",
+    built_at.x, built_at.y) or ""
+  detail = "build_power: " .. detail .. string.format("powered %d machine(s), %d pole(s) placed", wired, poles)
+  if #problems > 0 then
+    return false, detail .. " — not powered: " .. table.concat(problems, "; ")
+  end
+  return true, detail
+end
+
+
+-- -------------------------------------------------------------------------
 -- fuel_all() — top up every nearby AI-force burner that's low on fuel.
 -- -------------------------------------------------------------------------
 local FUEL_RADIUS = 64
@@ -638,6 +907,7 @@ AISkills.REGISTRY = {
   deconstruct      = skill_deconstruct,
   gather           = skill_gather,
   build_miner      = skill_build_miner,
+  build_power      = skill_build_power,
   build_smelter    = skill_build_smelter,
   fuel_all         = skill_fuel_all,
   loot_chests      = skill_loot_chests,

@@ -206,6 +206,7 @@ Skills are the primary interface between the LLM and the game. The LLM picks a s
 | `deconstruct` | _(none)_ | Mines everything marked for deconstruction. Second priority after ghosts. |
 | `gather` | `item`, `count` | Mines the nearest sources of an item (wood, ores, stone) until `count` is reached. |
 | `build_miner` | `resource`, `output` | Places a burner-mining-drill on the nearest patch of `resource`, fuels it, and puts a `chest`/`furnace`/`belt` at its output. |
+| `build_power` | _(none)_ | Builds steam power (offshore pump at the nearest water → boiler → steam engine, fuelled) and runs small electric poles to every electric machine without power. Later runs extend the grid to new machines. |
 | `build_smelter` | `ore`, `count` | Places and loads stone-furnaces to smelt ore into plates. |
 | `fuel_all` | _(none)_ | Tops up every nearby burner machine low on fuel. |
 | `research` | `tech` _(optional)_ | Queues a technology; auto-picks the next logical tech if `tech` is omitted. |
