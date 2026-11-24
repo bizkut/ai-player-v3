@@ -94,7 +94,7 @@ local function skill_build_smelter(character, p)
 
   local have_furnace = inv.get_item_count("stone-furnace")
   if have_furnace == 0 then
-    local queued = character.begin_crafting{recipe = "stone-furnace", count = 1}
+    local queued = AICrafting.begin(character, "stone-furnace", 1)
     if queued > 0 then
       return false, "build_smelter: out of stone-furnaces — hand-crafting one, retry next turn"
     end
@@ -146,7 +146,7 @@ local function skill_build_miner(character, p)
   local inv = inv_of(character)
 
   if inv.get_item_count("burner-mining-drill") == 0 then
-    character.begin_crafting{recipe = "burner-mining-drill", count = 1}
+    AICrafting.begin(character, "burner-mining-drill", 1)
     return false, "build_miner: no burner-mining-drill in inventory — crafting one, retry next turn"
   end
 
@@ -527,7 +527,6 @@ local function describe_trigger(trig)
   end
   return "satisfy trigger " .. serpent.line(trig)
 end
-AISkills.describe_trigger = describe_trigger
 
 -- Trigger techs the force can complete right now (prereqs met), as readable
 -- "'tech' unlocks when you ..." strings. Shared by the research skill and

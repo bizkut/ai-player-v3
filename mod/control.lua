@@ -5,6 +5,7 @@
 
 require("scripts.character")
 require("scripts.registry")
+require("scripts.crafting")
 require("scripts.perception")
 require("scripts.primitives")
 require("scripts.queries")
@@ -442,6 +443,13 @@ script.on_event(defines.events.on_tick, function(event)
 
   -- Expire directive
   AIBrain.process_directive_expiry(tick)
+
+  -- Report finished hand-crafts as production (the engine skips it for a
+  -- character with no player — see crafting.lua).
+  if tick % 30 == 0 then
+    local crafter = AICharacter.get_character()
+    if crafter then AICrafting.poll(crafter) end
+  end
 
   -- Autonomy gate: when disabled (an external MCP/harness is driving via skill
   -- tools), skip the periodic self-directed decision so the built-in router
