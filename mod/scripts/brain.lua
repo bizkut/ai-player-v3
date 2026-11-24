@@ -276,8 +276,21 @@ function AIBrain.parse_actions(json_str)
   return actions
 end
 
--- Extract a JSON string value for a named field, handling escape sequences.
--- Returns nil if the field is not present.
+-- One Unicode code point as UTF-8 bytes.
+local function utf8_char(cp)
+  if cp < 0x80 then return string.char(cp) end
+  if cp < 0x800 then
+    return string.char(0xC0 + math.floor(cp / 0x40), 0x80 + cp % 0x40)
+  end
+  if cp < 0x10000 then
+    return string.char(0xE0 + math.floor(cp / 0x1000), 0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
+  end
+  return string.char(0xF0 + math.floor(cp / 0x40000), 0x80 + math.floor(cp / 0x1000) % 0x40,
+    0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
+end
+
+-- Extract a JSON string value for a named field, handling escape sequences
+-- (\uXXXX decoded to UTF-8). Returns nil if the field is not present.
 -- Flattens \n and \t to spaces so chat messages don't split into multiple
 -- game.print calls (Factorio renders embedded newlines as separate chat lines).
 local function json_extract_string(obj, field)
@@ -297,6 +310,25 @@ local function json_extract_string(obj, field)
       elseif e == 'n'  then parts[#parts+1] = ' '
       elseif e == 'r'  then -- skip
       elseif e == 't'  then parts[#parts+1] = ' '
+      elseif e == 'u'  then
+        -- The bridge's json.dumps escapes all non-ASCII as \uXXXX; characters
+        -- beyond U+FFFF arrive as a UTF-16 surrogate pair.
+        local hex = obj:sub(i + 1, i + 4)
+        if hex:match("^%x%x%x%x$") then
+          local cp = tonumber(hex, 16)
+          i = i + 4
+          local lo = obj:sub(i + 1, i + 6):match("^\\u(%x%x%x%x)$")
+          lo = lo and tonumber(lo, 16)
+          if cp >= 0xD800 and cp <= 0xDBFF and lo and lo >= 0xDC00 and lo <= 0xDFFF then
+            cp = 0x10000 + (cp - 0xD800) * 0x400 + (lo - 0xDC00)
+            i = i + 6
+          elseif cp >= 0xD800 and cp <= 0xDFFF then
+            cp = 0xFFFD  -- unpaired surrogate
+          end
+          parts[#parts+1] = utf8_char(cp)
+        else
+          parts[#parts+1] = e
+        end
       else                  parts[#parts+1] = e
       end
     else

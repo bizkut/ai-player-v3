@@ -171,6 +171,7 @@ Run these from the in-game console (press `~`). The AI does **not** spawn automa
 | `/ai-do <skill> [arg] [count\|output]` | Run a skill **deterministically, bypassing the LLM** — e.g. `/ai-do build_miner iron-ore`. Useful for testing skills with no bridge running. |
 | `/ai-force <skill> [args]` \| `/ai-force off` | Lock the LLM router to a single skill until cleared. |
 | `/ai-collect` | (Solo only) AI mines back every building it placed, then returns to you. Refused in co-op mode to avoid mining the shared base. |
+| `/ai-claim` | (Co-op saves from before 0.4.3) Mark machines with no recorded builder as the AI's own, so `loot_chests` may empty their outputs. Machines whose builder has left the save also count, so run it only if those are the AI's. |
 
 > **Run without an LLM:** `/ai-do` executes any skill directly through the mod, so you can drive the AI character entirely from the console without the bridge or a model. The bridge is only required for autonomous LLM-driven play.
 

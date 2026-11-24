@@ -222,6 +222,7 @@ end
 -- -------------------------------------------------------------------------
 -- fuel_all() — top up every nearby AI-force burner that's low on fuel.
 -- -------------------------------------------------------------------------
+local FUEL_RADIUS = 64
 local function skill_fuel_all(character, _)
   local surface = character.surface
   local inv = inv_of(character)
@@ -230,7 +231,7 @@ local function skill_fuel_all(character, _)
   end
   local force = AICharacter.get_force()
   local fueled = 0
-  for _, e in ipairs(surface.find_entities_filtered{force = force, position = character.position, radius = 64}) do
+  for _, e in ipairs(surface.find_entities_filtered{force = force, position = character.position, radius = FUEL_RADIUS}) do
     if e.valid and e.type ~= "character" then
       local fb = e.get_fuel_inventory and e.get_fuel_inventory()
       if fb and fb.valid and fb.get_item_count("coal") < 5 then
@@ -242,8 +243,20 @@ local function skill_fuel_all(character, _)
       end
     end
   end
-  if fueled == 0 then return false, "fuel_all: nothing nearby needed fuel" end
-  return true, string.format("fueled %d burner(s)", fueled)
+  if fueled > 0 then return true, string.format("fueled %d burner(s)", fueled) end
+
+  -- Nothing in reach: point at the nearest machine that has run out (what
+  -- perception lists under needs.burners_low_fuel).
+  local cp, best, bd = character.position, nil, math.huge
+  for _, e in ipairs(AIRegistry.machines()) do
+    if e.status == defines.entity_status.no_fuel then
+      local d = distance(cp, e.position)
+      if d < bd then bd = d; best = e end
+    end
+  end
+  if not best then return false, "fuel_all: nothing needed fuel" end
+  return false, string.format("fuel_all: nothing within %d tiles needed fuel — nearest out of fuel (%s) is %s",
+    FUEL_RADIUS, best.name, goto_hint(cp, best.position))
 end
 
 -- -------------------------------------------------------------------------
@@ -665,6 +678,9 @@ end
 
 function AISkills.execute(character, entries)
   if not character or not character.valid then return end
+  -- The next prompt shows previous_summary as "Last turn": limit it to this turn's
+  -- own summary action, so one fallback ("model did not respond") can't linger.
+  storage.ai_player.memory.previous_summary = nil
   local results = {}
   for _, entry in ipairs(entries) do
     local ok, detail, label = run_entry(character, entry)

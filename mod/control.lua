@@ -233,6 +233,7 @@ local function init_storage()
   s.map_tag          = s.map_tag or nil
   s.memory           = s.memory or AIBrain.init_memory()
   s.machines         = s.machines or {}   -- registry.lua: unit_number -> LuaEntity
+  s.placed           = s.placed or {}     -- registry.lua: machines the AI placed itself
   s.last_reconcile_tick = s.last_reconcile_tick or 0
   -- Autonomous on_tick decision loop on by default; an external harness can
   -- disable it (set_autonomy) so it doesn't contend with skill calls. The
@@ -332,7 +333,6 @@ end
 
 script.on_init(function()
   init_storage()
-  storage.ai_player.placed = {}  -- new game: nothing to adopt (registry.lua)
   AICharacter.create_force()
   AIBrain.write_bridge_config()
   game.print("[AI Player v3] Initialised — use /spawn-ai-player to start", {r=0, g=1, b=1})
@@ -353,7 +353,6 @@ script.on_configuration_changed(function()
   -- Rebuild the machine registry from the live world (covers mod-update load and
   -- any machines created while the registry was absent/stale).
   AIRegistry.reconcile(game.surfaces["nauvis"], game.forces[storage.ai_player.force_name])
-  AIRegistry.adopt_existing()
   game.print("[AI Player v3] Configuration reloaded", {r=0.7, g=1, b=0.7})
 end)
 
@@ -811,6 +810,15 @@ commands.add_command("ai-pending",
       game.print(string.format("[AI] Pending #%s — %ds ago (%s)", id, age, trigger),
         {r=1, g=0.8, b=0.3})
     end
+  end
+)
+
+commands.add_command("ai-claim",
+  "Claim machines with no recorded builder (e.g. built by an older version of this mod) as the AI's, so it may collect their output",
+  function()
+    if not storage.ai_player then return end
+    local claimed = AIRegistry.claim_unowned()
+    game.print(string.format("[AI] Claimed %d machine(s) with no recorded builder", claimed), {r=0, g=1, b=0.5})
   end
 )
 

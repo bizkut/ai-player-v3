@@ -47,39 +47,38 @@ local function ai_force_name()
 end
 
 -- Register a machine. Ignores non-tracked types and entities not on the AI force,
--- so human/enemy builds never enter the set. placed_by_ai marks the AI's own
+-- so human/enemy builds never enter the set. placed_by_ai records the AI's own
 -- placements (see is_own).
 function AIRegistry.add(entity, placed_by_ai)
   if not (entity and entity.valid and entity.unit_number) then return end
   if not TRACKED_TYPES[entity.type] then return end
   if entity.force.name ~= ai_force_name() then return end
   store()[entity.unit_number] = entity
-  if placed_by_ai then
-    storage.ai_player.placed = storage.ai_player.placed or {}
-    storage.ai_player.placed[entity.unit_number] = entity
-  end
+  if placed_by_ai then storage.ai_player.placed[entity.unit_number] = entity end
 end
 
--- Did the AI place this machine itself? In co-op the registry holds the whole
--- shared base, the human's machines included; the AI may only empty the outputs
--- of its own, so it never drains the human's production lines.
+-- May the AI empty this machine's output? Solo: the AI has a force to itself, so
+-- everything on it is its own. Co-op: the force is shared with the human, so only
+-- machines the AI placed itself count; it never drains the human's production.
 -- storage.ai_player.placed: unit_number -> LuaEntity for AI placements.
 function AIRegistry.is_own(entity)
-  local placed = storage.ai_player.placed
-  return placed ~= nil and placed[entity.unit_number] ~= nil
+  if entity.force.name ~= "player" then return true end
+  return storage.ai_player.placed[entity.unit_number] ~= nil
 end
 
--- Saves from before placement tracking kept no record of who placed what. Once,
--- when such a save is first loaded, adopt the machines already standing that no
--- player built or configured: script-placed entities have no last_user, a
--- human's build carries theirs.
-function AIRegistry.adopt_existing()
-  if storage.ai_player.placed then return end
-  local placed = {}
+-- /ai-claim. Saves from before placement tracking hold no record of what the AI
+-- placed. Its machines have no last_user (created by script), but neither do
+-- machines whose builder has left the save, so claiming is the human's call and
+-- never automatic. Returns how many machines were claimed.
+function AIRegistry.claim_unowned()
+  local placed, claimed = storage.ai_player.placed, 0
   for un, e in pairs(store()) do
-    if e.valid and e.last_user == nil then placed[un] = e end
+    if e.valid and e.last_user == nil and not placed[un] then
+      placed[un] = e
+      claimed = claimed + 1
+    end
   end
-  storage.ai_player.placed = placed
+  return claimed
 end
 
 function AIRegistry.remove(unit_number)
@@ -132,7 +131,7 @@ function AIRegistry.reconcile(surface, force)
     if e.valid and e.unit_number then m[e.unit_number] = e end
   end
   storage.ai_player.machines = m
-  for un, e in pairs(storage.ai_player.placed or {}) do
+  for un, e in pairs(storage.ai_player.placed) do
     if not e.valid then storage.ai_player.placed[un] = nil end
   end
   storage.ai_player.last_reconcile_tick = game.tick
