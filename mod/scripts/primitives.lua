@@ -76,6 +76,10 @@ local function get_inventory_by_slot(entity, slot_name)
     elseif entity.type == "assembling-machine" then
       local inv = entity.get_inventory(defines.inventory.assembling_machine_input)
       if inv then return inv end
+    elseif entity.type == "lab" then
+      return entity.get_inventory(defines.inventory.lab_input)
+    elseif entity.type == "ammo-turret" then
+      return entity.get_inventory(defines.inventory.turret_ammo)
     end
     return entity.get_inventory(defines.inventory.chest)
   end
@@ -445,6 +449,10 @@ local function action_insert(character, action)
     return ok and inv ~= nil
   end)
   if not entity then
+    if not slot then
+      return false, string.format('insert: no building at {%d,%d} takes %s without an "inventory" — add one of fuel, input, chest, lab, ammo',
+        action.position.x, action.position.y, action.item)
+    end
     return false, "insert: no building with a '" .. tostring(slot) ..
                   "' slot near the target position"
   end

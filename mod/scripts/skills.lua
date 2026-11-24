@@ -161,37 +161,33 @@ local function skill_build_miner(character, p)
     return false, "build_miner: no burner-mining-drill in inventory — crafting one, retry next turn"
   end
 
-  -- nearest patch of the resource
-  local patch, pd = nil, math.huge
-  for _, e in ipairs(surface.find_entities_filtered{name = resource, type = "resource",
-                                                    position = character.position, radius = 64}) do
-    local dx, dy = e.position.x - character.position.x, e.position.y - character.position.y
-    local d = dx * dx + dy * dy
-    if d < pd then pd = d; patch = e end
-  end
-  if not patch then
+  -- patch tiles nearest first
+  local cp = character.position
+  local tiles = surface.find_entities_filtered{name = resource, type = "resource", position = cp, radius = 64}
+  if #tiles == 0 then
     return false, "build_miner: no '" .. resource .. "' patch within 64 tiles"
-      .. far_source_hint(surface, character.position, resource)
+      .. far_source_hint(surface, cp, resource)
   end
+  table.sort(tiles, function(a, b) return distance(a.position, cp) < distance(b.position, cp) end)
 
-  -- Do NOT teleport onto the patch first: ore has no collision box, so
-  -- find_non_colliding_position returns the patch tile itself and the character
-  -- ends up standing on it — then can_place(manual) fails and the drill can't be
-  -- placed. place/insert here all use explicit positions (find_entity searches
-  -- around action.position, not the character), so no character reach is needed.
-
-  -- place the drill on the patch (place primitive enforces drill-on-resource)
+  -- Place the drill (the place primitive enforces drill-on-resource) on the
+  -- nearest tile where it fits. Ore has no collision box, so a goto to an ore
+  -- position leaves the character standing on the patch, blocking the nearest
+  -- tiles; the farther ones remain. place/insert use explicit positions, so no
+  -- character reach is needed.
   local drill
-  for _, dir in ipairs({"south", "north", "east", "west"}) do
-    if AIActions.run(character, {action = "place", item = "burner-mining-drill",
-                                 position = patch.position, direction = dir}) then
-      drill = surface.find_entities_filtered{name = "burner-mining-drill",
-                                             position = patch.position, radius = 2}[1]
-      if drill then break end
+  for i = 1, math.min(#tiles, 16) do
+    local at = tiles[i].position
+    for _, dir in ipairs({"south", "north", "east", "west"}) do
+      if AIActions.run(character, {action = "place", item = "burner-mining-drill", position = at, direction = dir}) then
+        drill = surface.find_entities_filtered{name = "burner-mining-drill", position = at, radius = 2}[1]
+        if drill then break end
+      end
     end
+    if drill then break end
   end
   if not drill then
-    return false, "build_miner: couldn't place a drill on the " .. resource .. " patch (blocked?)"
+    return false, "build_miner: couldn't place a drill on the nearest " .. resource .. " tiles (blocked?)"
   end
 
   -- fuel the drill
@@ -891,6 +887,19 @@ end
 
 local function skill_research(character, p)
   local force = character.force
+
+  -- Something in progress: only queue an explicitly named tech behind it; never
+  -- pile unrelated techs onto the queue.
+  local cur = force.current_research
+  if cur then
+    if p.tech and try_queue(force, force.technologies[p.tech]) then
+      return true, "queued research: " .. p.tech .. " after " .. cur.name
+    end
+    local packs = {}
+    for _, ing in pairs(cur.research_unit_ingredients) do packs[#packs + 1] = ing.name end
+    return false, string.format("research: already researching %s (%d%%) — keep a powered lab fed with %s",
+      cur.name, math.floor(force.research_progress * 100), table.concat(packs, ", "))
+  end
 
   if p.tech then
     if try_queue(force, force.technologies[p.tech]) then

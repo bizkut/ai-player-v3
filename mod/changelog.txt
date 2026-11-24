@@ -1,4 +1,17 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.4
+Date: 2026-11-25
+  Bugfixes:
+    - insert/take without an "inventory" now find a lab's science-pack slot
+      and a turret's ammo slot; inserting where nothing fits says which
+      inventories exist instead of "no building with a 'nil' slot".
+    - research reports the technology already being researched (progress and
+      science packs it needs) instead of queueing unrelated technologies on
+      every call.
+    - Bridge responses lost the research "tech", build_miner "resource" and
+      deposit_to_chest "keep" parameters: research ignored the requested
+      technology and build_miner always mined iron-ore.
+---------------------------------------------------------------------------------------------------
 Version: 0.4.3
 Date: 2026-11-25
   Features:

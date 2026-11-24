@@ -342,15 +342,16 @@ end
 function AIBrain.parse_action_object(obj_str)
   local action = {}
 
-  -- String fields (primitive + skill params)
+  -- String fields (primitive + skill params). Every param a skill reads must be
+  -- listed here, or bridge responses silently lose it (skills.lua p.<field>).
   for _, field in ipairs({"action","skill","direction","item","name","type","recipe",
-                           "ore","output","message","text","title","inventory","slot"}) do
+                           "ore","resource","tech","output","message","text","title","inventory","slot"}) do
     local val = json_extract_string(obj_str, field)
     if val then action[field] = val end
   end
 
   -- Number fields
-  for _, field in ipairs({"count","radius","distance","index"}) do
+  for _, field in ipairs({"count","radius","distance","index","keep"}) do
     local val = obj_str:match('"' .. field .. '":%s*([%-]?%d+%.?%d*)')
     if val then action[field] = tonumber(val) end
   end
