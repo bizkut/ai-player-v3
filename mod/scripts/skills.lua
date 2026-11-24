@@ -15,6 +15,23 @@ local function inv_of(character)
   return character.get_inventory(defines.inventory.character_main)
 end
 
+-- When nothing is within a skill's working radius, point the model at the nearest
+-- source further out so it can goto there instead of retrying in place forever.
+local FAR_SEARCH_RADIUS = 256
+local function far_source_hint(surface, origin, item)
+  local filter = {position = origin, radius = FAR_SEARCH_RADIUS}
+  if item == "wood" then filter.type = "tree" else filter.name = item end
+  local best, bd = nil, math.huge
+  for _, e in ipairs(surface.find_entities_filtered(filter)) do
+    local dx, dy = e.position.x - origin.x, e.position.y - origin.y
+    local d = dx * dx + dy * dy
+    if d < bd then bd = d; best = e.position end
+  end
+  if not best then return " (none within " .. FAR_SEARCH_RADIUS .. " tiles either)" end
+  return string.format(' — nearest is %d tiles away: {"skill":"goto","position":{"x":%d,"y":%d}} first, then retry',
+    math.floor(math.sqrt(bd)), math.floor(best.x), math.floor(best.y))
+end
+
 -- -------------------------------------------------------------------------
 -- gather(item, count) — mine the nearest sources of `item` until `count`.
 -- Handles wood (mine trees by type) and ores/rocks (mine by name).
@@ -41,7 +58,13 @@ local function skill_gather(character, p)
         if d < sd then sd = d; src = e end
       end
     end
-    if not src then break end
+    if not src then
+      if gained == 0 then
+        return false, "gather: no reachable " .. item .. " sources within 40 tiles"
+          .. far_source_hint(surface, character.position, item)
+      end
+      break
+    end
     -- Teleport adjacent so the source is within mining reach, then mine.
     local sp = surface.find_non_colliding_position("character", src.position, 3, 0.5)
     if sp then character.teleport(sp) end
@@ -136,7 +159,8 @@ local function skill_build_miner(character, p)
     if d < pd then pd = d; patch = e end
   end
   if not patch then
-    return false, "build_miner: no '" .. resource .. "' patch within 64 tiles — gather/explore first"
+    return false, "build_miner: no '" .. resource .. "' patch within 64 tiles"
+      .. far_source_hint(surface, character.position, resource)
   end
 
   -- Do NOT teleport onto the patch first: ore has no collision box, so
@@ -486,6 +510,24 @@ local function try_queue(force, tech)
   return force.add_research(tech)
 end
 
+-- Human-readable form of a TechnologyPrototype.research_trigger.
+local function describe_trigger(trig)
+  local function name_of(v) return type(v) == "table" and v.name or v end
+  if trig.type == "craft-item" then
+    local item = name_of(trig.item)
+    local how = item:match("%-plate$") and " (smelt the ore in stone-furnaces: build_smelter; furnace output counts)"
+      or " (hand-craft it with the craft action)"
+    return string.format("produce %d %s%s", trig.count or 1, item, how)
+  elseif trig.type == "mine-entity" then
+    return "mine a " .. name_of(trig.entity)
+  elseif trig.type == "build-entity" then
+    return "build a " .. name_of(trig.entity)
+  elseif trig.type == "craft-fluid" then
+    return string.format("produce %d %s", trig.amount or 1, name_of(trig.fluid))
+  end
+  return "satisfy trigger " .. serpent.line(trig)
+end
+
 local function skill_research(character, p)
   local force = character.force
 
@@ -505,13 +547,18 @@ local function skill_research(character, p)
     end
   end
 
-  -- Nothing queueable: the next research is likely a TRIGGER tech (Factorio 2.0
-  -- bootstraps via crafting, not queuing). Tell the model to craft the science.
+  -- Nothing queueable: the next research is a TRIGGER tech (Factorio 2.0
+  -- bootstraps by producing/mining/building things, not by labs). Report the
+  -- actual trigger from the prototype so the model does the right thing.
+  local triggers = {}
   for _, t in pairs(force.technologies) do
     if t.enabled and not t.researched and prereqs_met(t) and t.prototype.research_trigger ~= nil then
-      return false, "research: '" .. t.name .. "' is unlocked by CRAFTING, not queuing — hand-craft "
-        .. "automation-science-pack (1 copper-plate + 1 iron-gear-wheel) to trigger it; then more tech becomes queueable"
+      triggers[#triggers + 1] = "'" .. t.name .. "' unlocks when you " .. describe_trigger(t.prototype.research_trigger)
     end
+  end
+  if #triggers > 0 then
+    return false, "research: nothing queueable — next techs are TRIGGER techs (no lab needed): "
+      .. table.concat(triggers, "; ")
   end
   return false, "research: nothing to queue right now"
 end

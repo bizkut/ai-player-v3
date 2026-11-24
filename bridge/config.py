@@ -253,7 +253,7 @@ class ConfigLoader:
         cfg.lm_studio_url   = raw.get("lm_studio_url", cfg.lm_studio_url)
         cfg.openai_api_key  = raw.get("openai_api_key") or cfg.openai_api_key
         cfg.openai_api_base = raw.get("openai_api_base", cfg.openai_api_base)
-        cfg.custom_url      = raw.get("custom_url", cfg.custom_url)
+        cfg.custom_url      = raw.get("custom_url") or cfg.custom_url
 
         rcon_host = raw.get("rcon_host", "")
         rcon_port = raw.get("rcon_port")
