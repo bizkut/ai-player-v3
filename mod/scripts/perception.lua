@@ -551,11 +551,14 @@ function AIPerception.gather(character)
   perception.game_phase = detect_game_phase(force)
 
   -- Research state — nothing progresses unless a tech is queued (use the
-  -- research skill). current = nil means NO research is queued.
+  -- research skill). current = nil means NO research is queued. trigger_techs
+  -- lists techs that unlock by producing/building things instead of labs.
   local cur = force.current_research
+  local triggers = (not cur) and AISkills.trigger_techs(force) or {}
   perception.research = {
     current  = cur and cur.name or nil,
     progress = cur and force.research_progress or 0,
+    trigger_techs = (#triggers > 0) and triggers or nil,
   }
 
   -- Whole-base machine view (scale-aware) + factory-wide maintenance needs.

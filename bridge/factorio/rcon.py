@@ -9,6 +9,7 @@ RCONGateway wraps factorio-rcon with:
 Factorio RCON commands used:
   /ai-response <id>|<json>   — deliver LLM response to the mod
   /sc <lua>                  — run arbitrary Lua; use rcon.print() to return values
+  /sc __ai-player-v3__ <lua> — same, but in the mod's Lua state (sees its `storage`)
   /spawn-ai-player           — spawn or reset the AI character
   /remove-ai-player          — destroy the AI character
   /ai-pending                — list pending requests (debug)
@@ -159,6 +160,14 @@ class RCONGateway:
         result = self._send(f"/sc {lua_code}")
         return result
 
+    def mod_lua(self, lua_code: str) -> str | None:
+        """
+        Run Lua inside the ai-player-v3 mod's Lua state. Plain /sc runs in the
+        level (scenario) state, where the mod's `storage.ai_player` is nil, so
+        anything that reads or writes mod storage must go through here.
+        """
+        return self._send(f"/sc __ai-player-v3__ {lua_code}")
+
     def spawn_ai_player(self) -> bool:
         """Spawn or reset the AI character."""
         result = self._send("/spawn-ai-player")
@@ -190,7 +199,7 @@ class RCONGateway:
             "game.print('[AI Bridge] Cleared '..n..' pending request(s)') "
             "else game.print('[AI Bridge] No AI state to clear') end"
         )
-        result = self.query_lua(lua)
+        result = self.mod_lua(lua)
         if result is not None:
             log.info("clear_pending_requests: %s", result.strip())
             return True
@@ -210,7 +219,7 @@ class RCONGateway:
             f"game.print('[AI Bridge] Request timeout set to {int(seconds)}s') "
             "else game.print('[AI Bridge] No AI state to configure') end"
         )
-        result = self.query_lua(lua)
+        result = self.mod_lua(lua)
         if result is not None:
             log.info("set_request_timeout: %ds (%d ticks)", int(seconds), ticks)
             return True
@@ -233,7 +242,7 @@ class RCONGateway:
             "game.print('[AI Bridge] Memory cleared (notes, todos, summary, directive)') "
             "else game.print('[AI Bridge] No AI memory to clear') end"
         )
-        result = self.query_lua(lua)
+        result = self.mod_lua(lua)
         if result is not None:
             log.info("clear_memory: %s", result.strip())
             return True

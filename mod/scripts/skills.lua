@@ -527,6 +527,20 @@ local function describe_trigger(trig)
   end
   return "satisfy trigger " .. serpent.line(trig)
 end
+AISkills.describe_trigger = describe_trigger
+
+-- Trigger techs the force can complete right now (prereqs met), as readable
+-- "'tech' unlocks when you ..." strings. Shared by the research skill and
+-- perception so the model sees the goal without spending a turn on research.
+function AISkills.trigger_techs(force)
+  local out = {}
+  for _, t in pairs(force.technologies) do
+    if t.enabled and not t.researched and prereqs_met(t) and t.prototype.research_trigger ~= nil then
+      out[#out + 1] = "'" .. t.name .. "' unlocks when you " .. describe_trigger(t.prototype.research_trigger)
+    end
+  end
+  return out
+end
 
 local function skill_research(character, p)
   local force = character.force
@@ -550,12 +564,7 @@ local function skill_research(character, p)
   -- Nothing queueable: the next research is a TRIGGER tech (Factorio 2.0
   -- bootstraps by producing/mining/building things, not by labs). Report the
   -- actual trigger from the prototype so the model does the right thing.
-  local triggers = {}
-  for _, t in pairs(force.technologies) do
-    if t.enabled and not t.researched and prereqs_met(t) and t.prototype.research_trigger ~= nil then
-      triggers[#triggers + 1] = "'" .. t.name .. "' unlocks when you " .. describe_trigger(t.prototype.research_trigger)
-    end
-  end
+  local triggers = AISkills.trigger_techs(force)
   if #triggers > 0 then
     return false, "research: nothing queueable — next techs are TRIGGER techs (no lab needed): "
       .. table.concat(triggers, "; ")

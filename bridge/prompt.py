@@ -39,7 +39,7 @@ move{direction[,distance≤16]}, mine{name|type|position}, place{item,position[,
 - React to "Results of your last actions": never repeat a FAILED entry unchanged. If a skill says it needs an item, gather/craft it, then retry.
 - Use needs[] to pick maintenance: burners_low_fuel → fuel_all; etc.
 - perception.factory is your whole-base view (all your machines, not just nearby ones): factory.summary.by_type/by_status are counts; factory.total is how many machines you have; factory.attention lists the machines that need action (nearest first) — fix those. factory.machines is a full per-machine list ONLY while the base is small; when it's absent the base is large, so rely on summary + attention instead of trying to micromanage every machine. perception.nearby_entities is just what's physically around the character (nearest first) for placement context.
-- RESEARCH = your main progress marker (perception.game_phase tracks it). If perception.research.current is null, NOTHING is queued — queue the next tech for your phase with {"skill":"research"} and keep labs fed. Early techs are TRIGGER techs: they unlock by producing items (e.g. smelting plates), not by labs. When {"skill":"research"} reports TRIGGER techs, do exactly what it says (e.g. gather ore, then build_smelter) — do NOT try to hand-craft science packs whose recipe is not unlocked yet.
+- RESEARCH = your main progress marker (perception.game_phase tracks it). If perception.research.current is null, NOTHING is queued — queue the next tech for your phase with {"skill":"research"} and keep labs fed. EXCEPTION: when perception.research.trigger_techs is present, those techs unlock by producing/building the listed things, not by labs — work toward them directly (gather ore, build_smelter, craft the item) and do NOT call {"skill":"research"} until trigger_techs is gone. Never hand-craft science packs whose recipe is not unlocked yet.
 - POWER: perception.power shows grid health (has_grid, production_kw, consumption_kw, machines_no_power, machines_low_power). If has_grid is true and machines_no_power + machines_low_power are 0, power is SUFFICIENT — do NOT build boilers/steam/power. Only build power when there's no grid or machines report no_power/low_power.
 - COOP: perception.coop true = you share the human's force (their whole base is your factory view; help expand it, don't rebuild basics). false = solo on your own force.
 - STAY NEAR HOME (perception.home.distance). If far with no reason, {"skill":"return_home"}.
@@ -54,7 +54,7 @@ move{direction[,distance≤16]}, mine{name|type|position}, place{item,position[,
 
 # Per-phase hint (brief — the router stays small).
 PHASE_HINT = {
-    0: "Phase 0 (bootstrap, nothing researched): mine ore and smelt iron/copper plates — the first techs unlock by producing plates; {\"skill\":\"research\"} tells you which.",
+    0: "Phase 0 (bootstrap, nothing researched): mine ore and smelt iron/copper plates — the first techs unlock by producing things; perception.research.trigger_techs lists exactly what.",
     1: "Phase 1 (red/automation science): automate iron+copper smelting and assemblers feeding labs; research toward logistic (green) science.",
     2: "Phase 2 (green/logistic science): scale belts, inserters, assemblers; research toward military science.",
     3: "Phase 3 (military science): turrets, walls, steel, ammo; secure and expand. Research toward chemical (blue) science.",

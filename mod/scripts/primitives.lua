@@ -360,6 +360,43 @@ local function action_set_recipe(character, action)
   return false, "set_recipe: " .. tostring(err)
 end
 
+-- Explain WHY a hand-craft was refused: unknown/locked/machine-only recipe, or
+-- which base items are short. Hand-craftable intermediates are expanded net of
+-- stock (begin_crafting auto-crafts them), so the model learns what to gather.
+local function craft_shortfall(character, recipe_name, count)
+  local force = character.force
+  local recipe = force.recipes[recipe_name]
+  if not recipe then return "unknown recipe '" .. recipe_name .. "'" end
+  if not recipe.enabled then return "recipe '" .. recipe_name .. "' is not unlocked yet" end
+  local cats = character.prototype.crafting_categories or {}
+  if not cats[recipe.category] then
+    return "'" .. recipe_name .. "' cannot be hand-crafted (category " .. recipe.category .. ") — use a machine"
+  end
+  local inv = character.get_main_inventory()
+  local stock, short = {}, {}
+  local function need(name, amount, depth)
+    if stock[name] == nil then stock[name] = inv.get_item_count(name) end
+    local used = math.min(stock[name], amount)
+    stock[name] = stock[name] - used
+    local missing = amount - used
+    if missing <= 0 then return end
+    local r = force.recipes[name]
+    if depth < 4 and r and r.enabled and cats[r.category] then
+      local per = 1
+      for _, p in pairs(r.products) do if p.name == name then per = p.amount or p.amount_min or 1 end end
+      local runs = math.ceil(missing / per)
+      for _, ing in pairs(r.ingredients) do need(ing.name, ing.amount * runs, depth + 1) end
+    else
+      short[name] = (short[name] or 0) + missing
+    end
+  end
+  for _, ing in pairs(recipe.ingredients) do need(ing.name, ing.amount * count, 0) end
+  local parts = {}
+  for n, m in pairs(short) do parts[#parts + 1] = m .. " more " .. n end
+  if #parts == 0 then return "ingredients look sufficient but crafting was refused" end
+  return "need " .. table.concat(parts, ", ") .. " (intermediates auto-craft) — gather/smelt those first"
+end
+
 local function action_craft(character, action)
   if not action.recipe then return false, "craft: missing recipe" end
   local count = action.count or 1
@@ -368,8 +405,8 @@ local function action_craft(character, action)
     debug_print(string.format("Crafting %d x %s (queued: %d)", count, action.recipe, queued))
     return true, string.format("started hand-crafting %d x %s", queued, action.recipe)
   end
-  return false, string.format(
-    "craft: cannot hand-craft %s — missing ingredients or recipe not available", action.recipe)
+  return false, string.format("craft: cannot hand-craft %d x %s — %s",
+    count, action.recipe, craft_shortfall(character, action.recipe, count))
 end
 
 local function action_insert(character, action)
