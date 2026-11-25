@@ -30,22 +30,29 @@ local function goto_hint(origin, target)
     math.floor(distance(origin, target)), math.floor(target.x), math.floor(target.y))
 end
 
-local function far_source_hint(surface, origin, item)
-  local filter = {position = origin, radius = FAR_SEARCH_RADIUS}
+-- Position of the nearest source of `item` (trees for "wood") within `radius`.
+local function nearest_source(surface, origin, item, radius)
+  local filter = {position = origin, radius = radius}
   if item == "wood" then filter.type = "tree" else filter.name = item end
   local best, bd = nil, math.huge
   for _, e in ipairs(surface.find_entities_filtered(filter)) do
-    local dx, dy = e.position.x - origin.x, e.position.y - origin.y
-    local d = dx * dx + dy * dy
+    local d = distance(e.position, origin)
     if d < bd then bd = d; best = e.position end
   end
+  return best
+end
+
+local function far_source_hint(surface, origin, item)
+  local best = nearest_source(surface, origin, item, FAR_SEARCH_RADIUS)
   if not best then return " (none within " .. FAR_SEARCH_RADIUS .. " tiles either)" end
   return " — nearest is " .. goto_hint(origin, best)
 end
 
 -- -------------------------------------------------------------------------
 -- gather(item, count) — mine the nearest sources of `item` until `count`.
--- Handles wood (mine trees by type) and ores/rocks (mine by name).
+-- Handles wood (mine trees by type) and ores/rocks (mine by name). With nothing
+-- within 40 tiles it travels once to the nearest source within 256 tiles (the
+-- model did not reliably follow a goto hint: 8 turns stuck needing stone).
 -- -------------------------------------------------------------------------
 local function skill_gather(character, p)
   local item = p.item
@@ -54,43 +61,50 @@ local function skill_gather(character, p)
   local surface = character.surface
   local inv = inv_of(character)
   local is_wood = (item == "wood")
-  local gained = 0
+  local gained, travelled = 0, nil
 
   for _ = 1, 150 do
     if inv.get_item_count(item) >= need then break end
     local filter = {position = character.position, radius = 40, limit = 60}
     if is_wood then filter.type = "tree" else filter.name = item end
-    local sources = surface.find_entities_filtered(filter)
     local src, sd = nil, math.huge
-    for _, e in ipairs(sources) do
+    for _, e in ipairs(surface.find_entities_filtered(filter)) do
       if e.valid and e.minable and e ~= character then
-        local dx, dy = e.position.x - character.position.x, e.position.y - character.position.y
-        local d = dx * dx + dy * dy
+        local d = distance(e.position, character.position)
         if d < sd then sd = d; src = e end
       end
     end
-    if not src then
-      if gained == 0 then
-        return false, "gather: no reachable " .. item .. " sources within 40 tiles"
-          .. far_source_hint(surface, character.position, item)
+    if src then
+      -- Teleport adjacent so the source is within mining reach, then mine.
+      local sp = surface.find_non_colliding_position("character", src.position, 3, 0.5)
+      if sp then character.teleport(sp) end
+      local before = inv.get_item_count()
+      character.mine_entity(src, true)
+      local delta = inv.get_item_count() - before
+      if delta <= 0 then break end  -- inventory full or stuck
+      gained = gained + delta
+    else
+      local far = gained == 0 and not travelled
+        and nearest_source(surface, character.position, item, FAR_SEARCH_RADIUS)
+      if not far then
+        if gained == 0 then
+          return false, "gather: no reachable " .. item .. " sources within "
+            .. (travelled and 40 or FAR_SEARCH_RADIUS) .. " tiles"
+        end
+        break
       end
-      break
+      travelled = {from = character.position, to = far}
+      character.teleport(surface.find_non_colliding_position("character", far, 5, 0.5) or far)
     end
-    -- Teleport adjacent so the source is within mining reach, then mine.
-    local sp = surface.find_non_colliding_position("character", src.position, 3, 0.5)
-    if sp then character.teleport(sp) end
-    local before = inv.get_item_count()
-    character.mine_entity(src, true)
-    local delta = inv.get_item_count() - before
-    if delta <= 0 then break end  -- inventory full or stuck
-    gained = gained + delta
   end
 
   local have = inv.get_item_count(item)
   if gained == 0 then
     return false, "gather: no reachable " .. item .. " sources within 40 tiles"
   end
-  return true, string.format("gathered %d %s (now have %d)", gained, item, have)
+  local trip = travelled and string.format("travelled %d tiles to {%d,%d}, ",
+    distance(travelled.from, travelled.to), travelled.to.x, travelled.to.y) or ""
+  return true, string.format("%sgathered %d %s (now have %d)", trip, gained, item, have)
 end
 
 -- -------------------------------------------------------------------------
@@ -109,7 +123,7 @@ local function skill_build_smelter(character, p)
     if queued > 0 then
       return false, "build_smelter: out of stone-furnaces — hand-crafting one, retry next turn"
     end
-    return false, "build_smelter: no stone-furnace and can't craft one (need stone)"
+    return false, 'build_smelter: no stone-furnace and can\'t craft one — each needs 5 stone: {"skill":"gather","item":"stone","count":25} first'
   end
 
   local count = math.min(want, have_furnace)

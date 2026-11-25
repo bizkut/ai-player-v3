@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.5
+Date: 2026-11-25
+  Bugfixes:
+    - gather travels to the nearest source within 256 tiles when none is
+      within 40, instead of only naming its position (the AI looped for
+      minutes needing stone without going to get it).
+    - build_smelter's "need stone" failure says to gather stone.
+---------------------------------------------------------------------------------------------------
 Version: 0.4.4
 Date: 2026-11-25
   Bugfixes:
