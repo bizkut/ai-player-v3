@@ -104,6 +104,9 @@ class BridgeConfig:
     # AI_SYSTEM_PREFIX="detailed thinking off", NOT a low token cap.
     max_tokens: int = 8192
     temperature: float = 0.7
+    # Reasoning effort for reasoning models (e.g. low / high / max — the valid
+    # levels depend on the model). Empty = don't send; the model's default applies.
+    reasoning_effort: str = ""
     # Optional text prepended to the system prompt. Use it to pass model-specific
     # directives without editing code, e.g. "detailed thinking off" disables
     # reasoning on Nemotron models (big latency win). Empty by default.
@@ -147,6 +150,7 @@ class BridgeConfig:
             timeout=self.timeout,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
+            reasoning_effort=self.reasoning_effort,
         )
 
 
@@ -210,6 +214,7 @@ class ConfigLoader:
                 cfg.temperature = float(temperature)
             except ValueError:
                 pass
+        cfg.reasoning_effort = self._e("AI_REASONING_EFFORT", cfg.reasoning_effort).strip().lower()
         cfg.system_prefix = self._e("AI_SYSTEM_PREFIX", cfg.system_prefix)
         cfg.rcon.host     = self._e("FACTORIO_RCON_HOST", cfg.rcon.host)
         port = self._e("FACTORIO_RCON_PORT")

@@ -8,6 +8,8 @@ Date: 2026-11-25
       via OPENCODE_BASE_URL) directly with OPENCODE_API_KEY from bridge/.env.
     - The bridge sends a stable x-opencode-session header per run, so turns
       share one session and reuse the prompt cache.
+    - AI_REASONING_EFFORT in bridge/.env sets reasoning_effort for reasoning
+      models on OpenAI-compatible providers (empty = model default).
   Bugfixes:
     - Bridge startup no longer deletes request files unless the mod confirms
       (via rcon.print) that its pending queue was cleared; an unconfirmed

@@ -51,12 +51,14 @@ def complete(messages: list[dict], config: ProviderConfig) -> str | None:
         default_headers={"x-opencode-session": SESSION_ID, "User-Agent": "ai-player-v3-bridge"},
     )
 
+    extra = {"reasoning_effort": config.reasoning_effort} if config.reasoning_effort else {}
     try:
         response = client.chat.completions.create(
             model=config.model,
             messages=messages,
             max_tokens=config.max_tokens,
             temperature=config.temperature,
+            **extra,
         )
         if not response.choices:
             log.error(

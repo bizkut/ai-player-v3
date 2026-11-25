@@ -275,6 +275,7 @@ All settings can be provided via `bridge/.env` (secrets, paths) or the in-game *
 | `AI_TIMEOUT` | — | `240` | Seconds to wait for a model response |
 | `AI_MAX_TOKENS` | — | `8192` | Max output tokens per turn |
 | `AI_TEMPERATURE` | — | `0.7` | Sampling temperature |
+| `AI_REASONING_EFFORT` | — | _(empty)_ | `reasoning_effort` for reasoning models (levels depend on the model, e.g. `low`/`high`/`max`); empty sends nothing |
 | `AI_SYSTEM_PREFIX` | — | _(empty)_ | Text prepended to system prompt (e.g. `detailed thinking off` for Nemotron) |
 
 ---

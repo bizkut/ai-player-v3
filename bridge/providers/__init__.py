@@ -24,6 +24,8 @@ class ProviderConfig:
     timeout: float = 120.0
     max_tokens: int = 8192
     temperature: float = 0.7
+    # Sent as reasoning_effort when set (OpenAI-compatible providers only).
+    reasoning_effort: str = ""
 
 
 def get_provider(config: ProviderConfig):
