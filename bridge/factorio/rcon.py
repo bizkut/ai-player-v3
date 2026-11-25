@@ -191,18 +191,23 @@ class RCONGateway:
         keeps running — old request IDs are stale and the mod would block indefinitely
         waiting for responses that will never arrive.
         """
+        # rcon.print (not game.print) so the reply proves the Lua actually ran:
+        # the first Lua command on a server can be refused with Factorio's
+        # "repeat the command to disable achievements" prompt, so try twice.
         lua = (
             "if storage.ai_player then "
             "local n=0 "
             "for _ in pairs(storage.ai_player.pending_requests) do n=n+1 end "
             "storage.ai_player.pending_requests={} "
-            "game.print('[AI Bridge] Cleared '..n..' pending request(s)') "
-            "else game.print('[AI Bridge] No AI state to clear') end"
+            "rcon.print('Cleared '..n..' pending request(s)') "
+            "else rcon.print('Cleared 0 pending request(s) (no AI state)') end"
         )
-        result = self.mod_lua(lua)
-        if result is not None:
-            log.info("clear_pending_requests: %s", result.strip())
-            return True
+        for _ in range(2):
+            result = self.mod_lua(lua)
+            if result and result.startswith("Cleared"):
+                log.info("clear_pending_requests: %s", result.strip())
+                return True
+        log.warning("clear_pending_requests: not confirmed (last reply: %r)", result)
         return False
 
     def set_request_timeout(self, seconds: float) -> bool:

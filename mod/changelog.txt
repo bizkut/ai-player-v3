@@ -1,4 +1,19 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.4.6
+Date: 2026-11-25
+  Changes:
+    - Targets Factorio 2.1 (factorio_version "2.1"); Factorio 2.1 refuses to
+      load mods declaring 2.0.
+    - New "opencode" provider: the bridge calls OpenCode Go (or pay-as-you-go
+      via OPENCODE_BASE_URL) directly with OPENCODE_API_KEY from bridge/.env.
+    - The bridge sends a stable x-opencode-session header per run, so turns
+      share one session and reuse the prompt cache.
+  Bugfixes:
+    - Bridge startup no longer deletes request files unless the mod confirms
+      (via rcon.print) that its pending queue was cleared; an unconfirmed
+      clear previously orphaned a pending request and left the AI idle for
+      5 minutes.
+---------------------------------------------------------------------------------------------------
 Version: 0.4.5
 Date: 2026-11-25
   Bugfixes:

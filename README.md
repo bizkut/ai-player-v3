@@ -1,8 +1,8 @@
 # AI Player v3
 
-A Factorio 2.0 mod that spawns an autonomous AI character in your game. The AI perceives the factory, decides what to do, and acts — building, mining, smelting, researching, and responding to chat — all driven by an LLM of your choice.
+A Factorio 2.1 mod that spawns an autonomous AI character in your game. The AI perceives the factory, decides what to do, and acts — building, mining, smelting, researching, and responding to chat — all driven by an LLM of your choice.
 
-**Providers supported:** LM Studio (local), Ollama, OpenAI, Anthropic Claude, or any OpenAI-compatible endpoint.
+**Providers supported:** LM Studio (local), Ollama, OpenAI, Anthropic Claude, OpenCode (Go / pay-as-you-go), or any OpenAI-compatible endpoint.
 
 ---
 
@@ -121,6 +121,7 @@ LM_STUDIO_URL=http://localhost:1234/v1
 # API keys (only needed for the matching provider)
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
+OPENCODE_API_KEY=
 
 # How long to wait for a model response (seconds). Measure with:
 #   python -m bridge.benchmark
@@ -186,6 +187,7 @@ Run these from the in-game console (press `~`). The AI does **not** spawn automa
 | OpenAI | `openai` | Set `OPENAI_API_KEY`. |
 | Anthropic Claude | `anthropic` | Set `ANTHROPIC_API_KEY`. |
 | Custom endpoint | `custom` | Any OpenAI-compatible API; set `AI_CUSTOM_URL`. |
+| OpenCode | `opencode` | Set `OPENCODE_API_KEY` in `bridge/.env` (never in mod settings — they are saved in the map and sent to joining players). Uses the Go plan by default; set `OPENCODE_BASE_URL=https://opencode.ai/inference/openai/v1` for pay-as-you-go. |
 
 ### Choosing a model
 
@@ -263,11 +265,13 @@ All settings can be provided via `bridge/.env` (secrets, paths) or the in-game *
 | `FACTORIO_RCON_HOST` | RCON Host | `localhost` | RCON server host |
 | `FACTORIO_RCON_PORT` | RCON Port | `27015` | RCON server port |
 | `FACTORIO_RCON_PASSWORD` | RCON Password | _(empty)_ | RCON password |
-| `AI_PROVIDER` | Provider | `lmstudio` | `lmstudio` / `openai` / `anthropic` / `custom` |
+| `AI_PROVIDER` | Provider | `lmstudio` | `lmstudio` / `openai` / `anthropic` / `custom` / `opencode` |
 | `AI_MODEL` | Model Name | `local-model` | Model identifier as reported by the provider |
 | `LM_STUDIO_URL` | LM Studio URL | `http://localhost:1234/v1` | Base URL for local/compatible server |
 | `OPENAI_API_KEY` | OpenAI API Key | _(empty)_ | OpenAI or compatible API key |
 | `ANTHROPIC_API_KEY` | — | _(empty)_ | Anthropic API key |
+| `OPENCODE_API_KEY` | — | _(empty)_ | OpenCode Console API key (`opencode` provider) |
+| `OPENCODE_BASE_URL` | — | `https://opencode.ai/inference/go/openai/v1` | OpenCode plan endpoint (Go; pay-as-you-go is `https://opencode.ai/inference/openai/v1`) |
 | `AI_TIMEOUT` | — | `240` | Seconds to wait for a model response |
 | `AI_MAX_TOKENS` | — | `8192` | Max output tokens per turn |
 | `AI_TEMPERATURE` | — | `0.7` | Sampling temperature |
@@ -287,7 +291,7 @@ All settings can be provided via `bridge/.env` (secrets, paths) or the in-game *
 
 ## Requirements
 
-- Factorio 2.0+
+- Factorio 2.1
 - Python 3.10+ (uses `X | None` type-hint syntax)
 - `factorio-rcon-py`, `openai`, `anthropic` (see `requirements.txt`)
 - LM Studio, Ollama, or API keys for a cloud provider

@@ -8,6 +8,7 @@ Supported providers:
   "lmstudio"  — openai_compat.py  (LM Studio, Ollama, vLLM, llama.cpp server)
   "openai"    — openai_compat.py  (api.openai.com with real key)
   "custom"    — openai_compat.py  (any OpenAI-compatible endpoint)
+  "opencode"  — openai_compat.py  (OpenCode Console Go / pay-as-you-go)
   "anthropic" — anthropic.py      (Claude via api.anthropic.com)
 """
 

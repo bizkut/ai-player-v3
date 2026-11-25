@@ -20,7 +20,7 @@ data:extend({
     name = "ai-player-provider",
     setting_type = "runtime-global",
     default_value = "lmstudio",
-    allowed_values = {"lmstudio", "openai", "anthropic", "custom"},
+    allowed_values = {"lmstudio", "openai", "anthropic", "custom", "opencode"},
     order = "c"
   },
   {

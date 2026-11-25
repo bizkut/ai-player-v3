@@ -86,6 +86,9 @@ class BridgeConfig:
     openai_api_base: str = "https://api.openai.com/v1"
     anthropic_api_key: str = ""
     custom_url: str = ""
+    opencode_api_key: str = ""
+    # OpenCode Go plan; pay-as-you-go is https://opencode.ai/inference/openai/v1
+    opencode_base_url: str = "https://opencode.ai/inference/go/openai/v1"
 
     # Request settings.
     # timeout is the SINGLE SOURCE for how long a model is allowed to reply.
@@ -126,6 +129,9 @@ class BridgeConfig:
         elif provider == "custom":
             url = self.custom_url or self.lm_studio_url
             api_key = self.openai_api_key or "custom"
+        elif provider == "opencode":
+            url = self.opencode_base_url
+            api_key = self.opencode_api_key
         else:
             # lmstudio (default) — any OAI-compatible local server.
             # The OpenAI SDK appends /chat/completions to base_url itself.
@@ -184,6 +190,8 @@ class ConfigLoader:
         cfg.openai_api_base   = self._e("OPENAI_API_BASE", cfg.openai_api_base)
         cfg.anthropic_api_key = self._e("ANTHROPIC_API_KEY", cfg.anthropic_api_key)
         cfg.custom_url        = self._e("AI_CUSTOM_URL", cfg.custom_url)
+        cfg.opencode_api_key  = self._e("OPENCODE_API_KEY", cfg.opencode_api_key)
+        cfg.opencode_base_url = self._e("OPENCODE_BASE_URL", cfg.opencode_base_url)
         timeout = self._e("AI_TIMEOUT")
         if timeout:
             try:

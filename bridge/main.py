@@ -104,8 +104,12 @@ def main() -> None:
     # request files on disk so we don't reply to IDs the mod no longer tracks. (A2)
     if rcon.connected:
         log.info("Clearing stale pending requests from previous session...")
-        rcon.clear_pending_requests()
-        watcher.purge_all()
+        # Only purge files once the mod confirms its queue is empty; deleting a
+        # request the mod still tracks blocks the AI until the request timeout.
+        if rcon.clear_pending_requests():
+            watcher.purge_all()
+        else:
+            log.warning("Mod queue not cleared — keeping request files so they get answered")
         # Push the derived request timeout to the mod (single source = AI_TIMEOUT).
         rcon.set_request_timeout(derived_timeout)
 

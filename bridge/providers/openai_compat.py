@@ -9,9 +9,16 @@ The api_key is required by the SDK but ignored by local servers — use any stri
 """
 
 import logging
+import uuid
 from . import ProviderConfig
 
 log = logging.getLogger(__name__)
+
+# One conversation ID per bridge run. Every turn is a fresh [system, user]
+# request, so session-routing proxies (e.g. OpenCode Go) cannot infer that the
+# turns belong together; a stable x-opencode-session keeps them on one backend
+# and lets the unchanging system prompt hit the prompt cache.
+SESSION_ID = f"ai-player-{uuid.uuid4().hex}"
 
 
 def complete(messages: list[dict], config: ProviderConfig) -> str | None:
@@ -27,6 +34,10 @@ def complete(messages: list[dict], config: ProviderConfig) -> str | None:
         log.error("openai package not installed — run: pip install openai")
         return None
 
+    if config.provider == "opencode" and not config.api_key:
+        log.error("AI_PROVIDER=opencode but OPENCODE_API_KEY is not set in bridge/.env")
+        return None
+
     client = OpenAI(
         base_url=config.url,
         api_key=config.api_key,
@@ -36,6 +47,8 @@ def complete(messages: list[dict], config: ProviderConfig) -> str | None:
         # so a slow model never finishes and one "turn" silently costs
         # 3 × timeout seconds. One clean attempt; the mod re-requests next tick.
         max_retries=0,
+        # OpenCode Go rejects generic client User-Agents.
+        default_headers={"x-opencode-session": SESSION_ID, "User-Agent": "ai-player-v3-bridge"},
     )
 
     try:
